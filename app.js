@@ -295,7 +295,14 @@ async function generateWorldFiles() {
   }
 
   output.textContent += `\n\n${okCount} lastet opp, ${failed.length} feilet:\n${failed
-    .map((result) => `${result.fileName}: ${result.error}`)
+    .map((result) => {
+      const attempts = Array.isArray(result.details?.attempts)
+        ? result.details.attempts
+          .map((attempt) => `${attempt.mode}: HTTP ${attempt.status}${attempt.preview ? ` (${attempt.preview})` : ""}`)
+          .join("\n")
+        : "";
+      return `${result.fileName}: ${result.error}${attempts ? `\n${attempts}` : ""}`;
+    })
     .join("\n")}`;
   setStatus("Noen world-filer kunne ikke lastes opp.");
 }

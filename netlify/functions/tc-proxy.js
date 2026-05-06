@@ -164,12 +164,26 @@ async function handleUploadWorldFile(body) {
   const attempts = [];
   const targets = [
     {
+      mode: "form-data-file-project",
+      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&projectId=${encodeURIComponent(projectId)}`,
+    },
+    {
       mode: "form-data-file",
       url: `${base}/files?parentId=${encodeURIComponent(parentId)}`,
     },
     {
+      mode: "octet-stream-name-query-project",
+      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&projectId=${encodeURIComponent(projectId)}&name=${encodeURIComponent(fileName)}`,
+      contentType: "application/octet-stream",
+    },
+    {
       mode: "octet-stream-name-query",
       url: `${base}/files?parentId=${encodeURIComponent(parentId)}&name=${encodeURIComponent(fileName)}`,
+      contentType: "application/octet-stream",
+    },
+    {
+      mode: "octet-stream-filename-query-project",
+      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&projectId=${encodeURIComponent(projectId)}&fileName=${encodeURIComponent(fileName)}`,
       contentType: "application/octet-stream",
     },
     {
@@ -183,7 +197,7 @@ async function handleUploadWorldFile(body) {
     let uploadBody;
     let headers = {};
 
-    if (target.mode === "form-data-file") {
+    if (target.mode.startsWith("form-data-file")) {
       const form = new FormData();
       form.append("file", new Blob([fileBuffer], { type: "text/plain;charset=utf-8" }), fileName);
       uploadBody = form;
