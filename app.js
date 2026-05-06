@@ -201,7 +201,46 @@ function renderFiles() {
   }
 }
 
-function generateWorldFiles() {
+async function uploadWorldFile(generatedFile) {
+  if (!project?.id || !accessToken) {
+    return {
+      ok: false,
+      error: "Mangler prosjektkobling eller access token.",
+    };
+  }
+
+  if (!generatedFile.parentId) {
+    return {
+      ok: false,
+      error: "Mangler mappe-ID for originalfilen.",
+    };
+  }
+
+  const result = await callProxy("uploadWorldFile", {
+    token: accessToken,
+    projectId: project.id,
+    projectLocation: project.location,
+    parentId: generatedFile.parentId,
+    fileName: generatedFile.target,
+    text: generatedFile.content,
+  });
+
+  if (!result.ok || !result.json?.ok) {
+    console.error("uploadWorldFile failed", result);
+    return {
+      ok: false,
+      error: result.json?.error || `HTTP ${result.status}`,
+      details: result.json || result.text,
+    };
+  }
+
+  return {
+    ok: true,
+    details: result.json,
+  };
+}
+
+async function generateWorldFiles() {
   const selectedIds = new Set(
     [...document.querySelectorAll('#fileList input[type="checkbox"]:checked')].map((input) => input.value),
   );
@@ -218,17 +257,47 @@ function generateWorldFiles() {
     source: file.name,
     target: getWorldFilename(file.name),
     folder: file.folder || file.path || "Rotmappe",
+    parentId: file.parentId,
     content,
   }));
 
-  const uploadStatus = accessToken
-    ? "Klar for opplasting via Trimble Connect Core API."
-    : "Demo: opplasting er ikke aktiv før appen er installert i Trimble Connect.";
+  output.textContent = generated
+    .map((file) => `${file.target}\n${file.content}\nLastes opp til: ${file.folder}`)
+    .join("\n\n");
+
+  if (!accessToken || !project?.id) {
+    output.textContent += "\n\nDemo: opplasting er ikke aktiv før appen er installert i Trimble Connect.";
+    return;
+  }
+
+  output.textContent += "\n\nLaster opp...";
+  const results = [];
+
+  for (const generatedFile of generated) {
+    const result = await uploadWorldFile(generatedFile);
+    results.push({
+      fileName: generatedFile.target,
+      ...result,
+    });
+  }
+
+  const okCount = results.filter((result) => result.ok).length;
+  const failed = results.filter((result) => !result.ok);
 
   output.textContent = generated
     .map((file) => `${file.target}\n${file.content}\nLastes opp til: ${file.folder}`)
-    .join("\n\n")
-    .concat(`\n\n${uploadStatus}`);
+    .join("\n\n");
+
+  if (failed.length === 0) {
+    output.textContent += `\n\nFerdig: ${okCount} world-fil${okCount === 1 ? "" : "er"} lastet opp til Trimble Connect.`;
+    setStatus(`Ferdig: ${okCount} world-fil${okCount === 1 ? "" : "er"} lastet opp.`);
+    return;
+  }
+
+  output.textContent += `\n\n${okCount} lastet opp, ${failed.length} feilet:\n${failed
+    .map((result) => `${result.fileName}: ${result.error}`)
+    .join("\n")}`;
+  setStatus("Noen world-filer kunne ikke lastes opp.");
 }
 
 async function start() {

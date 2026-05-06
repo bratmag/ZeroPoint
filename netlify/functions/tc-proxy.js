@@ -10,6 +10,10 @@ exports.handler = async function handler(event) {
       return jsonResponse(200, await handleListModelFiles(body));
     }
 
+    if (body.action === "uploadWorldFile") {
+      return jsonResponse(200, await handleUploadWorldFile(body));
+    }
+
     return jsonResponse(400, { ok: false, error: `Unknown action: ${String(body.action)}` });
   } catch (err) {
     console.error("tc-proxy fatal:", err);
@@ -119,6 +123,117 @@ async function fetchJsonWithBearer(url, token) {
     contentType,
     text,
     json: safeJsonParse(text),
+  };
+}
+
+async function fetchWithBearer(url, token, options = {}) {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  const contentType = res.headers.get("content-type") || "";
+  const text = await res.text();
+
+  return {
+    url,
+    ok: res.ok,
+    status: res.status,
+    statusText: res.statusText,
+    contentType,
+    text,
+    json: safeJsonParse(text),
+  };
+}
+
+async function handleUploadWorldFile(body) {
+  const { token, projectId, projectLocation, parentId, fileName, text } = body;
+
+  if (!token || !projectId || !parentId || !fileName || typeof text !== "string") {
+    return {
+      ok: false,
+      error: "Mangler token, projectId, parentId, fileName eller text",
+    };
+  }
+
+  const base = await getCoreBaseUrl(projectLocation);
+  const fileBuffer = Buffer.from(text, "utf8");
+  const attempts = [];
+  const targets = [
+    {
+      mode: "form-data-file",
+      url: `${base}/files?parentId=${encodeURIComponent(parentId)}`,
+    },
+    {
+      mode: "octet-stream-name-query",
+      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&name=${encodeURIComponent(fileName)}`,
+      contentType: "application/octet-stream",
+    },
+    {
+      mode: "octet-stream-filename-query",
+      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&fileName=${encodeURIComponent(fileName)}`,
+      contentType: "application/octet-stream",
+    },
+  ];
+
+  for (const target of targets) {
+    let uploadBody;
+    let headers = {};
+
+    if (target.mode === "form-data-file") {
+      const form = new FormData();
+      form.append("file", new Blob([fileBuffer], { type: "text/plain;charset=utf-8" }), fileName);
+      uploadBody = form;
+    } else {
+      uploadBody = new Uint8Array(fileBuffer);
+      headers = { "Content-Type": target.contentType };
+    }
+
+    const res = await fetchWithBearer(target.url, token, {
+      method: "POST",
+      headers,
+      body: uploadBody,
+    });
+
+    attempts.push({
+      mode: target.mode,
+      url: target.url,
+      ok: res.ok,
+      status: res.status,
+      preview: shortText(res.text, 500),
+    });
+
+    if (res.ok) {
+      return {
+        ok: true,
+        action: "uploadWorldFile",
+        project: { id: projectId, location: projectLocation },
+        upload: {
+          mode: target.mode,
+          parentId,
+          fileName,
+          size: fileBuffer.length,
+        },
+        response: res.json || res.text,
+        attempts,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    action: "uploadWorldFile",
+    error: "Kunne ikke laste opp world-filen automatisk.",
+    project: { id: projectId, location: projectLocation },
+    upload: {
+      parentId,
+      fileName,
+      size: fileBuffer.length,
+    },
+    attempts,
   };
 }
 
