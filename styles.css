@@ -87,6 +87,13 @@ button {
   min-height: 36px;
 }
 
+.empty {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  color: #59616d;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

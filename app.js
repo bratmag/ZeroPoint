@@ -14,7 +14,7 @@ const demoFiles = [
 let workspaceApi = null;
 let accessToken = null;
 let project = null;
-let files = demoFiles;
+let files = [];
 
 function getExtension(filename) {
   const dotIndex = filename.lastIndexOf(".");
@@ -58,8 +58,73 @@ function setStatus(message) {
   document.querySelector("#connectionStatus").textContent = message;
 }
 
+function getProjectRootFolderId(connectProject) {
+  return (
+    connectProject?.rootFolderId ||
+    connectProject?.rootFolderIdentifier ||
+    connectProject?.rootId ||
+    connectProject?.root?.id ||
+    connectProject?.details?.rootFolderId ||
+    null
+  );
+}
+
+async function callProxy(action, payload) {
+  const response = await fetch("/.netlify/functions/tc-proxy", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  const text = await response.text();
+  let json = null;
+
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    text,
+    json,
+  };
+}
+
+async function loadProjectFiles() {
+  if (!project?.id || !accessToken) {
+    return;
+  }
+
+  setStatus(`Henter modeller fra prosjekt: ${project.name ?? project.id}...`);
+
+  const result = await callProxy("listModelFiles", {
+    token: accessToken,
+    projectId: project.id,
+    projectLocation: project.location,
+    rootFolderId: getProjectRootFolderId(project),
+  });
+
+  if (!result.ok || !result.json?.ok) {
+    console.error("listModelFiles failed", result);
+    files = [];
+    renderFiles();
+    setStatus("Kunne ikke hente modeller fra prosjektet.");
+    return;
+  }
+
+  files = Array.isArray(result.json.files) ? result.json.files : [];
+  renderFiles();
+  setStatus(`Koblet til prosjekt: ${project.name ?? project.id}. Fant ${files.length} modellfil${files.length === 1 ? "" : "er"}.`);
+}
+
 async function connectToTrimbleConnect() {
   if (window.parent === window) {
+    files = demoFiles;
+    renderFiles();
     setStatus("Demo-modus: åpne appen som Trimble Connect extension for prosjektdata.");
     return;
   }
@@ -103,6 +168,8 @@ async function connectToTrimbleConnect() {
     setStatus(`Koblet til prosjekt: ${project.name ?? project.id ?? "ukjent prosjekt"}.`);
   } catch (error) {
     console.error(error);
+    files = demoFiles;
+    renderFiles();
     setStatus("Kunne ikke koble til Trimble Connect. Kjører videre i demo-modus.");
   }
 }
@@ -113,13 +180,22 @@ function renderFiles() {
 
   fileList.innerHTML = "";
 
+  if (modelFiles.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "Ingen IFC-, TRB- eller DWG-filer funnet.";
+    fileList.append(empty);
+    return;
+  }
+
   for (const file of modelFiles) {
     const row = document.createElement("label");
     row.className = "file-row";
+    const folder = file.folder || file.path || "Rotmappe";
     row.innerHTML = `
       <input type="checkbox" value="${file.id}">
       <span>${file.name}</span>
-      <span>(${file.folder})</span>
+      <span>(${folder})</span>
     `;
     fileList.append(row);
   }
@@ -141,7 +217,7 @@ function generateWorldFiles() {
   const generated = selectedFiles.map((file) => ({
     source: file.name,
     target: getWorldFilename(file.name),
-    folder: file.folder,
+    folder: file.folder || file.path || "Rotmappe",
     content,
   }));
 
@@ -156,8 +232,8 @@ function generateWorldFiles() {
 }
 
 async function start() {
-  renderFiles();
   await connectToTrimbleConnect();
+  await loadProjectFiles();
 }
 
 document.querySelector("#generateButton").addEventListener("click", generateWorldFiles);
