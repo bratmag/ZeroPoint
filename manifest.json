@@ -1,6 +1,7 @@
 {
   "title": "ZeroPoint",
-  "url": "https://zeropoint3dmodel.netlify.app/",
+  "url": "https://zeropoint3dmodel.netlify.app/index.html",
+  "icon": "https://zeropoint3dmodel.netlify.app/icon.svg",
   "description": "Genererer world-filer for IFC, TRB og DWG med valgt nullpunkt.",
   "configCommand": "zeropoint_config",
   "enabled": true

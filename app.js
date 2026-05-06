@@ -84,6 +84,7 @@ async function connectToTrimbleConnect() {
     await workspaceApi.ui?.setMenu?.({
       title: "ZeroPoint",
       command: "zeropoint_home",
+      icon: "https://zeropoint3dmodel.netlify.app/icon.svg",
       subMenus: [
         {
           title: "Georeferer",

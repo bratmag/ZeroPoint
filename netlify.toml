@@ -10,6 +10,12 @@
     Content-Type = "application/json; charset=utf-8"
 
 [[headers]]
+  for = "/icon.svg"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Content-Type = "image/svg+xml; charset=utf-8"
+
+[[headers]]
   for = "/*"
   [headers.values]
     X-Content-Type-Options = "nosniff"
