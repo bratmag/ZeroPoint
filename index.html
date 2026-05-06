@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="no">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Georeferer modeller</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="toolbar">
+        <div>
+          <h1>Georeferer modeller</h1>
+          <p>Generer world-filer for IFC, TRB og DWG med absolutt nullpunkt.</p>
+        </div>
+        <button id="generateButton" type="button">Georeferer modellen</button>
+      </section>
+
+      <section class="panel">
+        <h2>Modeller</h2>
+        <div id="fileList" class="file-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Angi nullpunkt</h2>
+        <div class="grid">
+          <label>
+            Lokalt øst
+            <input id="localEast" type="number" step="0.001" value="0.0">
+          </label>
+          <label>
+            Lokalt nord
+            <input id="localNorth" type="number" step="0.001" value="0.0">
+          </label>
+          <label>
+            Absolutt øst
+            <input id="absoluteEast" type="number" step="0.001" value="103650.000">
+          </label>
+          <label>
+            Absolutt nord
+            <input id="absoluteNorth" type="number" step="0.001" value="1263020.000">
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Genererte filer</h2>
+        <pre id="output" class="output">Velg en modell og klikk georeferer.</pre>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
