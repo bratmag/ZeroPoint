@@ -47,6 +47,10 @@ function shortText(text, max = 800) {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
+function isUploadAlreadyCompleted(responseText) {
+  return /file upload already completed/i.test(String(responseText || ""));
+}
+
 let regionCache = null;
 
 async function discoverRegions() {
@@ -162,88 +166,130 @@ async function handleUploadWorldFile(body) {
   const base = await getCoreBaseUrl(projectLocation);
   const fileBuffer = Buffer.from(text, "utf8");
   const attempts = [];
-  const targets = [
-    {
-      mode: "form-data-file-project",
-      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&projectId=${encodeURIComponent(projectId)}`,
+  const initUrl = `${base}/files/fs/upload?parentId=${encodeURIComponent(parentId)}&parentType=FOLDER`;
+  const init = await fetchWithBearer(initUrl, token, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
     },
-    {
-      mode: "form-data-file",
-      url: `${base}/files?parentId=${encodeURIComponent(parentId)}`,
-    },
-    {
-      mode: "octet-stream-name-query-project",
-      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&projectId=${encodeURIComponent(projectId)}&name=${encodeURIComponent(fileName)}`,
-      contentType: "application/octet-stream",
-    },
-    {
-      mode: "octet-stream-name-query",
-      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&name=${encodeURIComponent(fileName)}`,
-      contentType: "application/octet-stream",
-    },
-    {
-      mode: "octet-stream-filename-query-project",
-      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&projectId=${encodeURIComponent(projectId)}&fileName=${encodeURIComponent(fileName)}`,
-      contentType: "application/octet-stream",
-    },
-    {
-      mode: "octet-stream-filename-query",
-      url: `${base}/files?parentId=${encodeURIComponent(parentId)}&fileName=${encodeURIComponent(fileName)}`,
-      contentType: "application/octet-stream",
-    },
-  ];
+    body: JSON.stringify({ name: fileName }),
+  });
+  attempts.push({
+    mode: "signed-init",
+    url: initUrl,
+    ok: init.ok,
+    status: init.status,
+    preview: shortText(init.text, 500),
+  });
 
-  for (const target of targets) {
-    let uploadBody;
-    let headers = {};
+  if (!init.ok || !init.json) {
+    return {
+      ok: false,
+      action: "uploadWorldFile",
+      error: "Kunne ikke starte signed upload.",
+      project: { id: projectId, location: projectLocation },
+      upload: {
+        parentId,
+        fileName,
+        size: fileBuffer.length,
+      },
+      attempts,
+    };
+  }
 
-    if (target.mode.startsWith("form-data-file")) {
-      const form = new FormData();
-      form.append("file", new Blob([fileBuffer], { type: "text/plain;charset=utf-8" }), fileName);
-      uploadBody = form;
-    } else {
-      uploadBody = new Uint8Array(fileBuffer);
-      headers = { "Content-Type": target.contentType };
-    }
+  const uploadId = init.json.uploadId || init.json.id || init.json.data?.uploadId || init.json.result?.uploadId;
+  const uploadUrl =
+    init.json.contents?.[0]?.url ||
+    init.json.data?.contents?.[0]?.url ||
+    init.json.result?.contents?.[0]?.url ||
+    init.json.uploadUrl ||
+    init.json.url;
 
-    const res = await fetchWithBearer(target.url, token, {
-      method: "POST",
-      headers,
-      body: uploadBody,
-    });
+  if (!uploadId || !uploadUrl) {
+    return {
+      ok: false,
+      action: "uploadWorldFile",
+      error: "Signed upload manglet uploadId eller uploadUrl.",
+      project: { id: projectId, location: projectLocation },
+      upload: {
+        parentId,
+        fileName,
+        size: fileBuffer.length,
+      },
+      attempts,
+    };
+  }
 
-    attempts.push({
-      mode: target.mode,
-      url: target.url,
-      ok: res.ok,
-      status: res.status,
-      preview: shortText(res.text, 500),
-    });
+  const upload = await fetch(uploadUrl, {
+    method: "PUT",
+    body: new Uint8Array(fileBuffer),
+  });
+  const uploadText = await upload.text();
+  attempts.push({
+    mode: "signed-put",
+    url: uploadUrl,
+    ok: upload.ok,
+    status: upload.status,
+    preview: shortText(uploadText, 500),
+  });
 
-    if (res.ok) {
-      return {
-        ok: true,
-        action: "uploadWorldFile",
-        project: { id: projectId, location: projectLocation },
-        upload: {
-          mode: target.mode,
-          parentId,
-          fileName,
-          size: fileBuffer.length,
-        },
-        response: res.json || res.text,
-        attempts,
-      };
-    }
+  if (!upload.ok) {
+    return {
+      ok: false,
+      action: "uploadWorldFile",
+      error: "Kunne ikke skrive filinnhold til signed upload URL.",
+      project: { id: projectId, location: projectLocation },
+      upload: {
+        parentId,
+        fileName,
+        size: fileBuffer.length,
+      },
+      attempts,
+    };
+  }
+
+  const completeUrl = `${base}/files/fs/upload/${encodeURIComponent(uploadId)}/complete`;
+  const complete = await fetchWithBearer(completeUrl, token, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ format: "SINGLE_PART" }),
+  });
+  attempts.push({
+    mode: "signed-complete",
+    url: completeUrl,
+    ok: complete.ok,
+    status: complete.status,
+    preview: shortText(complete.text, 500),
+  });
+
+  if (complete.ok || isUploadAlreadyCompleted(complete.text)) {
+    return {
+      ok: true,
+      action: "uploadWorldFile",
+      project: { id: projectId, location: projectLocation },
+      upload: {
+        mode: "signed-upload",
+        parentId,
+        fileName,
+        uploadId,
+        size: fileBuffer.length,
+        alreadyCompleted: !complete.ok,
+      },
+      response: complete.json || complete.text,
+      attempts,
+    };
   }
 
   return {
     ok: false,
     action: "uploadWorldFile",
-    error: "Kunne ikke laste opp world-filen automatisk.",
+    error: "Kunne ikke fullføre signed upload.",
     project: { id: projectId, location: projectLocation },
     upload: {
       parentId,
+      uploadId,
       fileName,
       size: fileBuffer.length,
     },
