@@ -52,6 +52,11 @@ p {
   color: #59616d;
 }
 
+.status {
+  color: #0063a6;
+  font-size: 13px;
+}
+
 button {
   min-height: 40px;
   border: 0;
