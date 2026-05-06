@@ -51,6 +51,10 @@ function isUploadAlreadyCompleted(responseText) {
   return /file upload already completed/i.test(String(responseText || ""));
 }
 
+function md5Base64(buffer) {
+  return require("crypto").createHash("md5").update(buffer).digest("base64");
+}
+
 let regionCache = null;
 
 async function discoverRegions() {
@@ -249,10 +253,12 @@ async function handleUploadWorldFile(body) {
   }
 
   const completeUrl = `${base}/files/fs/upload/${encodeURIComponent(uploadId)}/complete`;
+  const digestHeader = `MD5=${md5Base64(fileBuffer)}`;
   const complete = await fetchWithBearer(completeUrl, token, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Digest: digestHeader,
     },
     body: JSON.stringify({ format: "SINGLE_PART" }),
   });
