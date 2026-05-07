@@ -51,10 +51,25 @@ function isUploadAlreadyCompleted(responseText) {
   return /file upload already completed/i.test(String(responseText || ""));
 }
 
-function isAcceptedDespiteCompleteError(response) {
-  const text = String(response?.text || "");
-  return response?.status === 400 &&
-    /invalid format/i.test(text);
+function isAcceptedDespiteCompleteError(attempts) {
+  const signedPutOk = attempts.some((attempt) =>
+    attempt.mode === "signed-put" &&
+    attempt.ok &&
+    attempt.status >= 200 &&
+    attempt.status < 300
+  );
+
+  if (!signedPutOk) return false;
+
+  return attempts.some((attempt) => {
+    const preview = String(attempt.preview || "");
+    return attempt.mode?.startsWith("signed-complete") &&
+      attempt.status === 400 &&
+      (
+        /invalid format/i.test(preview) ||
+        /multipart upload not found for specified format/i.test(preview)
+      );
+  });
 }
 
 function md5Base64(buffer) {
@@ -307,7 +322,7 @@ async function handleUploadWorldFile(body) {
     }
   }
 
-  if (isAcceptedDespiteCompleteError(finalComplete)) {
+  if (isAcceptedDespiteCompleteError(attempts)) {
     return {
       ok: true,
       action: "uploadWorldFile",
