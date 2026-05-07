@@ -58,6 +58,24 @@ function setStatus(message) {
   document.querySelector("#connectionStatus").textContent = message;
 }
 
+function setResult(message, type = "neutral") {
+  const resultMessage = document.querySelector("#resultMessage");
+  resultMessage.className = `result-message ${type}`;
+  resultMessage.innerHTML = message;
+}
+
+function setLog(message, show = false) {
+  const output = document.querySelector("#output");
+  const details = document.querySelector("#logDetails");
+  output.textContent = message || "";
+  details.hidden = !show;
+  if (!show) details.open = false;
+}
+
+function successIcon() {
+  return '<span class="success-mark">✓</span>';
+}
+
 function getProjectRootFolderId(connectProject) {
   return (
     connectProject?.rootFolderId ||
@@ -150,12 +168,6 @@ async function connectToTrimbleConnect() {
       title: "ZeroPoint",
       command: "zeropoint_home",
       icon: "https://zeropoint3dmodel.netlify.app/icon.svg",
-      subMenus: [
-        {
-          title: "Georeferer",
-          command: "zeropoint_home",
-        },
-      ],
     });
 
     project = await workspaceApi.project.getProject();
@@ -245,10 +257,10 @@ async function generateWorldFiles() {
     [...document.querySelectorAll('#fileList input[type="checkbox"]:checked')].map((input) => input.value),
   );
   const selectedFiles = files.filter((file) => selectedIds.has(file.id));
-  const output = document.querySelector("#output");
 
   if (selectedFiles.length === 0) {
-    output.textContent = "Ingen modeller valgt.";
+    setResult("Ingen modeller valgt.", "error");
+    setLog("", false);
     return;
   }
 
@@ -261,16 +273,19 @@ async function generateWorldFiles() {
     content,
   }));
 
-  output.textContent = generated
+  const generatedLog = generated
     .map((file) => `${file.target}\n${file.content}\nLastes opp til: ${file.folder}`)
     .join("\n\n");
+  setLog(generatedLog, false);
 
   if (!accessToken || !project?.id) {
-    output.textContent += "\n\nDemo: opplasting er ikke aktiv før appen er installert i Trimble Connect.";
+    setResult("Demo: opplasting er ikke aktiv før appen er installert i Trimble Connect.", "neutral");
+    setLog(`${generatedLog}\n\nDemo: opplasting er ikke aktiv før appen er installert i Trimble Connect.`, true);
     return;
   }
 
-  output.textContent += "\n\nLaster opp...";
+  setResult("Laster opp world-filer til Trimble Connect...", "working");
+  setLog(`${generatedLog}\n\nLaster opp...`, false);
   const results = [];
 
   for (const generatedFile of generated) {
@@ -284,17 +299,16 @@ async function generateWorldFiles() {
   const okCount = results.filter((result) => result.ok).length;
   const failed = results.filter((result) => !result.ok);
 
-  output.textContent = generated
-    .map((file) => `${file.target}\n${file.content}\nLastes opp til: ${file.folder}`)
-    .join("\n\n");
-
   if (failed.length === 0) {
-    output.textContent += `\n\nFerdig: ${okCount} world-fil${okCount === 1 ? "" : "er"} lastet opp til Trimble Connect.`;
+    const values = getCoordinateValues();
+    const coordinateText = `Lokalt nullpunkt ${formatCoordinate(values.localEast)}, ${formatCoordinate(values.localNorth)} -> absolutt nullpunkt ${formatCoordinate(values.absoluteEast)}, ${formatCoordinate(values.absoluteNorth)}.`;
+    setResult(`${successIcon()}${okCount} world-fil${okCount === 1 ? "" : "er"} lastet opp til Trimble Connect.<br>${coordinateText}`, "success");
+    setLog(`${generatedLog}\n\nFerdig: ${okCount} world-fil${okCount === 1 ? "" : "er"} lastet opp til Trimble Connect.`, false);
     setStatus(`Ferdig: ${okCount} world-fil${okCount === 1 ? "" : "er"} lastet opp.`);
     return;
   }
 
-  output.textContent += `\n\n${okCount} lastet opp, ${failed.length} feilet:\n${failed
+  const errorLog = `${generatedLog}\n\n${okCount} lastet opp, ${failed.length} feilet:\n${failed
     .map((result) => {
       const attempts = Array.isArray(result.details?.attempts)
         ? result.details.attempts
@@ -304,6 +318,8 @@ async function generateWorldFiles() {
       return `${result.fileName}: ${result.error}${attempts ? `\n${attempts}` : ""}`;
     })
     .join("\n")}`;
+  setResult(`${okCount} lastet opp, ${failed.length} feilet. Åpne teknisk logg for detaljer.`, "error");
+  setLog(errorLog, true);
   setStatus("Noen world-filer kunne ikke lastes opp.");
 }
 

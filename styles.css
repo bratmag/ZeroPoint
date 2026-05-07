@@ -75,6 +75,46 @@ button {
   background: #fff;
 }
 
+.result-message {
+  border-radius: 6px;
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.result-message.neutral {
+  background: #eef3f7;
+  color: #2d3744;
+}
+
+.result-message.success {
+  border: 1px solid #9ed7b4;
+  background: #edf8f1;
+  color: #145a2f;
+}
+
+.result-message.error {
+  border: 1px solid #efb1aa;
+  background: #fff0ee;
+  color: #8d251c;
+}
+
+.result-message.working {
+  background: #eef5fb;
+  color: #00528a;
+}
+
+.success-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #16833a;
+  color: #fff;
+  font-weight: 700;
+}
+
 .file-list {
   display: grid;
   gap: 8px;
@@ -118,11 +158,21 @@ input[type="number"] {
 .output {
   min-height: 120px;
   overflow: auto;
-  margin: 0;
+  margin: 10px 0 0;
   border-radius: 6px;
   padding: 12px;
   background: #111820;
   color: #eaf0f6;
+}
+
+.log-details {
+  margin-top: 12px;
+}
+
+.log-details summary {
+  cursor: pointer;
+  color: #0063a6;
+  font-size: 13px;
 }
 
 @media (max-width: 760px) {
