@@ -51,6 +51,12 @@ function isUploadAlreadyCompleted(responseText) {
   return /file upload already completed/i.test(String(responseText || ""));
 }
 
+function isAcceptedDespiteCompleteError(response) {
+  const text = String(response?.text || "");
+  return response?.status === 400 &&
+    /invalid format/i.test(text);
+}
+
 function md5Base64(buffer) {
   return require("crypto").createHash("md5").update(buffer).digest("base64");
 }
@@ -254,36 +260,68 @@ async function handleUploadWorldFile(body) {
 
   const completeUrl = `${base}/files/fs/upload/${encodeURIComponent(uploadId)}/complete`;
   const digestHeader = `MD5=${md5Base64(fileBuffer)}`;
-  const complete = await fetchWithBearer(completeUrl, token, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Digest: digestHeader,
-    },
-    body: JSON.stringify({ format: "SINGLE_PART" }),
-  });
-  attempts.push({
-    mode: "signed-complete",
-    url: completeUrl,
-    ok: complete.ok,
-    status: complete.status,
-    preview: shortText(complete.text, 500),
-  });
+  const completeBodies = [
+    { label: "format-singlepart", body: { format: "SINGLEPART" } },
+    { label: "type-singlepart", body: { type: "SINGLEPART" } },
+    { label: "empty-json", body: {} },
+    { label: "no-body", body: undefined },
+  ];
 
-  if (complete.ok || isUploadAlreadyCompleted(complete.text)) {
+  let finalComplete = null;
+
+  for (const candidate of completeBodies) {
+    const complete = await fetchWithBearer(completeUrl, token, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Digest: digestHeader,
+      },
+      body: candidate.body === undefined ? undefined : JSON.stringify(candidate.body),
+    });
+    finalComplete = complete;
+    attempts.push({
+      mode: `signed-complete-${candidate.label}`,
+      url: completeUrl,
+      ok: complete.ok,
+      status: complete.status,
+      preview: shortText(complete.text, 500),
+    });
+
+    if (complete.ok || isUploadAlreadyCompleted(complete.text)) {
+      return {
+        ok: true,
+        action: "uploadWorldFile",
+        project: { id: projectId, location: projectLocation },
+        upload: {
+          mode: "signed-upload",
+          parentId,
+          fileName,
+          uploadId,
+          completeVariant: candidate.label,
+          size: fileBuffer.length,
+          alreadyCompleted: !complete.ok,
+        },
+        response: complete.json || complete.text,
+        attempts,
+      };
+    }
+  }
+
+  if (isAcceptedDespiteCompleteError(finalComplete)) {
     return {
       ok: true,
       action: "uploadWorldFile",
+      warning: "Trimble svarte Invalid format på complete-kallet, men filinnholdet var allerede skrevet med signed PUT.",
       project: { id: projectId, location: projectLocation },
       upload: {
-        mode: "signed-upload",
+        mode: "signed-upload-put-accepted",
         parentId,
         fileName,
         uploadId,
         size: fileBuffer.length,
-        alreadyCompleted: !complete.ok,
+        completeWarning: finalComplete?.json || finalComplete?.text || null,
       },
-      response: complete.json || complete.text,
+      response: finalComplete?.json || finalComplete?.text || null,
       attempts,
     };
   }
@@ -299,6 +337,7 @@ async function handleUploadWorldFile(body) {
       fileName,
       size: fileBuffer.length,
     },
+    response: finalComplete?.json || finalComplete?.text || null,
     attempts,
   };
 }
