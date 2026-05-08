@@ -167,7 +167,7 @@ async function connectToTrimbleConnect() {
     await workspaceApi.ui?.setMenu?.({
       title: "ZeroPoint",
       command: "zeropoint_home",
-      icon: "https://zeropoint3dmodel.netlify.app/icon.svg",
+      icon: "https://zeropoint3dmodel.netlify.app/zeropoint-logo.png",
     });
 
     project = await workspaceApi.project.getProject();
